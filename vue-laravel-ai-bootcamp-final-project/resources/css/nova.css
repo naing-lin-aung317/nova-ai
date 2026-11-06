@@ -1,0 +1,322 @@
+@import 'bootstrap/dist/css/bootstrap.min.css';
+
+:root {
+    --nova-bg: #f6f7fb;
+    --nova-card: #fff;
+    --nova-tx: #111827;
+    --nova-mu: #6b7280;
+    --nova-bd: #e5e7eb;
+    --nova-pr: #3355ff;
+    --nova-pt: #fff;
+    --nova-soft: #eceffd;
+    --nova-ok: #047857;
+    color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+        --nova-bg: #0f1220;
+        --nova-card: #181c2e;
+        --nova-tx: #e8eaf3;
+        --nova-mu: #9aa3b8;
+        --nova-bd: #2a3047;
+        --nova-pr: #6c85ff;
+        --nova-pt: #0f1220;
+        --nova-soft: #222849;
+        --nova-ok: #4ade80;
+        color-scheme: dark;
+    }
+}
+
+:root[data-theme='dark'] {
+    --nova-bg: #0f1220;
+    --nova-card: #181c2e;
+    --nova-tx: #e8eaf3;
+    --nova-mu: #9aa3b8;
+    --nova-bd: #2a3047;
+    --nova-pr: #6c85ff;
+    --nova-pt: #0f1220;
+    --nova-soft: #222849;
+    --nova-ok: #4ade80;
+    color-scheme: dark;
+}
+
+html {
+    scroll-padding-top: env(safe-area-inset-top, 0px);
+}
+
+body {
+    margin: 0;
+    background: var(--nova-bg);
+    color: var(--nova-tx);
+    font: 15px/1.55 -apple-system, 'Segoe UI', Roboto, 'Noto Sans Myanmar', sans-serif;
+}
+
+html[lang='my'] body {
+    font-family: 'Noto Sans Myanmar', sans-serif;
+    line-height: 1.9;
+}
+
+h1,
+h2 {
+    margin: 0 0 8px;
+    line-height: 1.25;
+}
+
+h1 {
+    font-size: clamp(26px, 5vw, 40px);
+}
+
+h2 {
+    font-size: 22px;
+}
+
+a {
+    color: var(--nova-pr);
+    text-decoration: none;
+}
+
+p {
+    margin: 0 0 10px;
+}
+
+.nova-muted {
+    color: var(--nova-mu);
+    font-size: 13px;
+}
+
+.nova-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+.nova-side {
+    width: 230px;
+    background: var(--nova-card);
+    border-right: 1px solid var(--nova-bd);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: auto;
+}
+
+.nova-side a {
+    padding: 8px 10px;
+    border-radius: 10px;
+    color: var(--nova-mu);
+}
+
+.nova-side a.is-active {
+    background: var(--nova-soft);
+    color: var(--nova-pr);
+    font-weight: 600;
+}
+
+.nova-side-spacer {
+    flex: 1;
+}
+
+.nova-main {
+    flex: 1;
+    min-width: 0;
+    padding: 22px;
+    max-width: 1100px;
+}
+
+.nova-top {
+    display: none;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--nova-card);
+    border-bottom: 1px solid var(--nova-bd);
+    padding: 10px 14px;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.nova-logo {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--nova-tx);
+}
+
+.nova-logo i {
+    background: var(--nova-pr);
+    color: var(--nova-pt);
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    font-style: normal;
+}
+
+.nova-btn {
+    display: inline-block;
+    text-align: center;
+    border: 1px solid var(--nova-bd);
+    background: var(--nova-card);
+    color: var(--nova-tx);
+    padding: 8px 14px;
+    border-radius: 10px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.nova-btn-primary {
+    background: var(--nova-pr);
+    color: var(--nova-pt);
+    border-color: var(--nova-pr);
+}
+
+.nova-card {
+    background: var(--nova-card);
+    border: 1px solid var(--nova-bd);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+.nova-badge {
+    display: inline-block;
+    padding: 1px 9px;
+    border-radius: 99px;
+    font-size: 12px;
+    background: var(--nova-soft);
+    color: var(--nova-pr);
+    font-weight: 700;
+}
+
+.nova-credits {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.nova-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.nova-seg {
+    display: inline-flex;
+    border: 1px solid var(--nova-bd);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--nova-soft);
+}
+
+.nova-seg button {
+    border: 0;
+    background: none;
+    color: var(--nova-mu);
+    padding: 5px 10px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.nova-seg button[aria-pressed='true'] {
+    background: var(--nova-card);
+    color: var(--nova-tx);
+    font-weight: 600;
+}
+
+.nova-public {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 18px;
+}
+
+.nova-auth-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 100vh;
+}
+
+.nova-hero {
+    background: linear-gradient(135deg, #2f4bff, #7c5cff);
+    color: #fff;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.nova-hero .nova-logo,
+.nova-hero h2,
+.nova-hero p {
+    color: #fff;
+}
+
+.nova-hero .nova-logo i {
+    background: #fff;
+    color: #2f4bff;
+}
+
+.nova-hero h2 {
+    font-size: 32px;
+}
+
+.nova-auth-panel {
+    display: grid;
+    place-items: center;
+    padding: 18px;
+}
+
+.nova-auth-panel .nova-card {
+    width: 100%;
+    max-width: 400px;
+}
+
+.nova-simple {
+    min-height: 80vh;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+}
+
+.nova-simple .nova-card {
+    width: 100%;
+    max-width: 400px;
+}
+
+@media (max-width: 800px) {
+    .nova-side {
+        position: fixed;
+        left: -250px;
+        z-index: 9;
+        transition: left 0.2s;
+        width: 240px;
+    }
+
+    .nova-side.is-open {
+        left: 0;
+    }
+
+    .nova-top {
+        display: flex;
+    }
+
+    .nova-main {
+        padding: 14px;
+    }
+
+    .nova-auth-split {
+        grid-template-columns: 1fr;
+    }
+
+    .nova-hero {
+        display: none;
+    }
+}

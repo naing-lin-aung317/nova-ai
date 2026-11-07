@@ -5,10 +5,13 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 const page = usePage();
+
+const isRegister = computed(() => page.component === 'auth/Register');
 const heroTitle = computed(() =>
-    page.component === 'auth/Register'
-        ? t('shell.heroRegister')
-        : t('shell.heroLogin'),
+    isRegister.value ? t('shell.heroRegister') : t('shell.heroLogin'),
+);
+const heroLead = computed(() =>
+    isRegister.value ? t('shell.heroRegisterNote') : t('shell.landingSub'),
 );
 </script>
 
@@ -20,9 +23,10 @@ const heroTitle = computed(() =>
             </Link>
             <div>
                 <h2>{{ heroTitle }}</h2>
-                <p>{{ t('shell.landingSub') }}</p>
+                <p v-if="isRegister" class="nova-credits-lg">{{ t('shell.heroRegisterCredits') }}</p>
+                <p>{{ heroLead }}</p>
             </div>
-            <p>{{ t('shell.placeholder') }}</p>
+            <p>{{ t('shell.noCharge') }}</p>
         </aside>
         <div class="nova-auth-panel">
             <slot />

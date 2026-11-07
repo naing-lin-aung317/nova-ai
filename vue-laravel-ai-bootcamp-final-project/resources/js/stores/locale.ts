@@ -20,7 +20,13 @@ export const useLocaleStore = defineStore('locale', () => {
         localStorage.setItem(storageKey, next);
     }
 
-    function init(): void {
+    function init(serverLocale?: AppLocale): void {
+        if (serverLocale === 'en' || serverLocale === 'my') {
+            apply(serverLocale);
+
+            return;
+        }
+
         const stored = localStorage.getItem(storageKey);
 
         if (isLocale(stored)) {

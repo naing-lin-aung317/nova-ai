@@ -6,6 +6,7 @@ import ThemeSwitcher from '@/components/shell/ThemeSwitcher.vue';
 
 defineProps<{
     titleKey: string;
+    subtitleKey?: string;
 }>();
 
 const { t } = useI18n();
@@ -16,10 +17,17 @@ const { t } = useI18n();
         <p>
             <Link href="/">← {{ t('shell.backHome') }}</Link>
         </p>
+        <div class="nova-row" style="justify-content: space-between">
+            <Link class="nova-logo" href="/" style="color: var(--nova-tx)">
+                <i>N</i>{{ t('appName') }}
+            </Link>
+            <span class="nova-row">
+                <LanguageSwitcher />
+                <ThemeSwitcher />
+            </span>
+        </div>
         <h2>{{ t(titleKey) }}</h2>
-        <p class="nova-muted">{{ t('shell.placeholder') }}</p>
+        <p v-if="subtitleKey" class="nova-muted">{{ t(subtitleKey) }}</p>
         <slot />
-        <LanguageSwitcher />
-        <ThemeSwitcher />
     </div>
 </template>

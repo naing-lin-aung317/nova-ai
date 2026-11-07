@@ -14,7 +14,13 @@ export const useThemeStore = defineStore('theme', () => {
         document.documentElement.dataset.theme = next;
     }
 
-    function init(): void {
+    function init(serverPreference?: ThemePreference): void {
+        if (serverPreference === 'light' || serverPreference === 'dark') {
+            apply(serverPreference);
+
+            return;
+        }
+
         const stored = localStorage.getItem(storageKey);
 
         apply(stored === 'dark' ? 'dark' : 'light');

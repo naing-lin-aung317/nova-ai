@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import { persistTheme } from '@/composables/syncPreferences';
 import { useThemeStore, type ThemePreference } from '@/stores/theme';
 
 const { t } = useI18n();
 const theme = useThemeStore();
+
+function select(option: ThemePreference): void {
+    theme.apply(option);
+    persistTheme(option);
+}
 
 const options: ThemePreference[] = ['light', 'dark'];
 
@@ -20,7 +26,7 @@ function label(option: ThemePreference): string {
                 :key="option"
                 type="button"
                 :aria-pressed="theme.preference === option"
-                @click="theme.apply(option)"
+                @click="select(option)"
             >
                 {{ label(option) }}
             </button>

@@ -49,7 +49,14 @@ function isActive(href: string): boolean {
         </div>
         <LanguageSwitcher />
         <ThemeSwitcher />
-        <Link v-if="!admin" href="/login" @click="emit('navigate')">
+        <Link
+            v-if="!admin"
+            as="button"
+            class="nova-btn w-100"
+            href="/logout"
+            method="post"
+            @click="emit('navigate')"
+        >
             {{ t('nav.logout') }}
         </Link>
     </nav>

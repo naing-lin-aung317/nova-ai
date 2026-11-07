@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -25,8 +26,32 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $this->authUser($request->user()),
             ],
+            'flash' => [
+                'status' => $request->session()->get('status'),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function authUser(?User $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'email_verified_at' => $user->email_verified_at,
+            'role' => $user->role->value,
+            'status' => $user->status->value,
+            'preferred_language' => $user->preferred_language,
+            'theme' => $user->theme,
         ];
     }
 }

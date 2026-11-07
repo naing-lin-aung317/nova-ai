@@ -65,7 +65,7 @@ return [
         'login' => null,
         'logout' => null,
         'password-confirmation' => null,
-        'register' => null,
+        'register' => '/email/verify',
         'email-verification' => null,
         'password-reset' => null,
     ],

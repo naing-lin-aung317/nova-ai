@@ -171,6 +171,49 @@ p {
     cursor: pointer;
 }
 
+.nova-btn-link {
+    background: none;
+    border: none;
+    color: var(--nova-pr);
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+}
+
+.nova-errors {
+    color: #b91c1c;
+    margin: 0 0 12px;
+    padding-left: 18px;
+}
+
+.nova-password-bar {
+    background: var(--nova-bd);
+    border-radius: 4px;
+    height: 4px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+
+.nova-password-bar b {
+    background: var(--nova-pr);
+    display: block;
+    height: 100%;
+}
+
+.nova-credits-lg {
+    font-size: 28px;
+    font-weight: 600;
+    margin: 0 0 8px;
+}
+
+.nova-alert {
+    background: var(--nova-soft);
+    border: 1px solid var(--nova-bd);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+}
+
 .nova-btn-primary {
     background: var(--nova-pr);
     color: var(--nova-pt);
@@ -206,6 +249,25 @@ p {
     align-items: center;
     flex-wrap: wrap;
     justify-content: space-between;
+}
+
+.nova-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.nova-grid-2 {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.nova-grid-3 {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.nova-demo-out {
+    font-size: 14px;
+    margin-top: 8px;
+    white-space: pre-wrap;
 }
 
 .nova-seg {

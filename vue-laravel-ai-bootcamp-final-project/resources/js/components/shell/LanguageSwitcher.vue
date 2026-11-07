@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import { persistLocale } from '@/composables/syncPreferences';
 import { useLocaleStore, type AppLocale } from '@/stores/locale';
 
 const { t } = useI18n();
 const locale = useLocaleStore();
+
+function select(id: AppLocale): void {
+    locale.apply(id);
+    persistLocale(id);
+}
 
 const options: { id: AppLocale; label: string }[] = [
     { id: 'en', label: 'EN' },
@@ -19,7 +25,7 @@ const options: { id: AppLocale; label: string }[] = [
                 :key="option.id"
                 type="button"
                 :aria-pressed="locale.locale === option.id"
-                @click="locale.apply(option.id)"
+                @click="select(option.id)"
             >
                 {{ option.label }}
             </button>

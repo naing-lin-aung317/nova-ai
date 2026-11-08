@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -28,6 +29,7 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $this->authUser($request->user()),
             ],
+            'wallet' => $this->wallet($request->user()),
             'flash' => [
                 'status' => $request->session()->get('status'),
             ],
@@ -53,5 +55,17 @@ class HandleInertiaRequests extends Middleware
             'preferred_language' => $user->preferred_language,
             'theme' => $user->theme,
         ];
+    }
+
+    /**
+     * @return array{available: int, reserved: int}|null
+     */
+    protected function wallet(?User $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        return app(WalletService::class)->balancesForUser($user);
     }
 }

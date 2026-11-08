@@ -4,11 +4,14 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
+use App\Services\WalletService;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -74,6 +77,22 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->status === UserStatus::Suspended;
     }
 
+    /**
+     * @return HasOne<CreditWallet, $this>
+     */
+    public function creditWallet(): HasOne
+    {
+        return $this->hasOne(CreditWallet::class);
+    }
+
+    /**
+     * @return HasMany<CustomTone, $this>
+     */
+    public function customTones(): HasMany
+    {
+        return $this->hasMany(CustomTone::class);
+    }
+
     protected static function booted(): void
     {
         static::updated(function (User $user): void {
@@ -83,6 +102,10 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
                 && $user->status === UserStatus::PendingVerification
             ) {
                 $user->forceFill(['status' => UserStatus::Active])->saveQuietly();
+            }
+
+            if ($user->wasChanged('email_verified_at') && $user->email_verified_at !== null) {
+                app(WalletService::class)->grantSignupBonus($user);
             }
         });
     }

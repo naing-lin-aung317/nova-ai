@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Settings\AccountController;
 use App\Http\Controllers\Settings\PreferencesController;
+use App\Http\Controllers\TonesController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -9,9 +11,12 @@ use Inertia\Inertia;
 Route::inertia('/', 'public/Landing')->name('home');
 
 Route::middleware('auth')->group(function () {
-    Route::inertia('/dashboard', 'app/Dashboard')->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::inertia('/generator', 'app/Generator')->name('generator');
-    Route::inertia('/tones', 'app/Tones')->name('tones');
+    Route::get('/tones', [TonesController::class, 'index'])->name('tones');
+    Route::post('/tones', [TonesController::class, 'store'])->name('tones.store');
+    Route::put('/tones/{customTone}', [TonesController::class, 'update'])->name('tones.update');
+    Route::delete('/tones/{customTone}', [TonesController::class, 'destroy'])->name('tones.destroy');
     Route::inertia('/history', 'app/History')->name('history');
     Route::inertia('/billing', 'app/Billing')->name('billing');
     Route::inertia('/settings', 'app/Settings')->name('settings');

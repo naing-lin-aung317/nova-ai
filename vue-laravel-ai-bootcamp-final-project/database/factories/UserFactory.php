@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use App\Models\User;
+use App\Services\WalletService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -18,6 +19,18 @@ class UserFactory extends Factory
      * The current password being used by the factory.
      */
     protected static ?string $password;
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            $wallets = app(WalletService::class);
+            $wallets->ensureWallet($user);
+
+            if ($user->email_verified_at !== null) {
+                $wallets->grantSignupBonus($user);
+            }
+        });
+    }
 
     /**
      * Define the model's default state.

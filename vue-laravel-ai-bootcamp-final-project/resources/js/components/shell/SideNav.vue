@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
+import { useWallet } from '@/composables/useWallet';
 import LanguageSwitcher from '@/components/shell/LanguageSwitcher.vue';
 import ThemeSwitcher from '@/components/shell/ThemeSwitcher.vue';
 import type { NavItem } from '@/shell/navigation';
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const page = usePage();
+const { availableCredits } = useWallet();
 
 function isActive(href: string): boolean {
     return page.url.split('?')[0] === href;
@@ -45,7 +47,7 @@ function isActive(href: string): boolean {
         </Link>
         <div v-else class="nova-card">
             <p class="nova-muted">{{ t('nav.credits') }}</p>
-            <p class="nova-credits">{{ t('shell.staticCredits') }}</p>
+            <p class="nova-credits">{{ availableCredits }}</p>
         </div>
         <LanguageSwitcher />
         <ThemeSwitcher />

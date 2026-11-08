@@ -264,6 +264,34 @@ p {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
+.nova-big {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.nova-big.cr {
+    color: var(--nova-pr);
+}
+
+.nova-pos {
+    color: var(--nova-ok);
+    font-weight: 600;
+}
+
+.nova-neg {
+    color: #b91c1c;
+    font-weight: 600;
+}
+
+.nova-li {
+    border: 1px solid var(--nova-bd);
+    border-radius: 10px;
+    cursor: pointer;
+    margin-bottom: 8px;
+    padding: 10px 12px;
+}
+
 .nova-demo-out {
     font-size: 14px;
     margin-top: 8px;

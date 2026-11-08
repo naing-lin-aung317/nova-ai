@@ -2,12 +2,9 @@
 
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
-use Illuminate\Auth\Events\Registered;
-use Illuminate\Support\Facades\Event;
+use App\Models\User;
 
 test('users can register with valid data', function () {
-    Event::fake([Registered::class]);
-
     $response = $this->post('/register', [
         'name' => 'Aye Chan',
         'email' => 'aye@example.com',
@@ -28,7 +25,10 @@ test('users can register with valid data', function () {
         'theme' => 'light',
     ]);
 
-    Event::assertDispatched(Registered::class);
+    $user = User::query()->where('email', 'aye@example.com')->firstOrFail();
+
+    expect($user->creditWallet)->not->toBeNull()
+        ->and($user->creditWallet->available_balance)->toBe(0);
 });
 
 test('registration requires accepting terms', function () {

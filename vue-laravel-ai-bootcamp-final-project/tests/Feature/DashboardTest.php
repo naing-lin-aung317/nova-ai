@@ -15,9 +15,10 @@ test('dashboard shows wallet stats and signup bonus activity', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('app/Dashboard')
             ->where('stats.availableCredits', WalletService::SIGNUP_BONUS_CREDITS)
-            ->where('stats.generations', 0)
+            ->where('stats.generationsTotal', 0)
+            ->where('stats.generationsThisMonth', 0)
+            ->where('stats.creditsSpentThisMonth', 0)
             ->where('stats.customTones', 1)
-            ->has('recentTransactions', 1)
             ->where('recentContent', []));
 });
 

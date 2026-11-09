@@ -26,20 +26,23 @@ function confirmDelete(event: SubmitEvent): void {
 </script>
 
 <template>
-    <div>
-        <h2>{{ t('pages.settings') }}</h2>
+    <div class="nova-settings">
+        <header class="nova-settings-header">
+            <h2 class="nova-settings-title">{{ t('pages.settings') }}</h2>
+            <p class="nova-muted" style="margin-top: 8px">{{ t('settings.pageSubtitle') }}</p>
+        </header>
 
-        <div style="max-width: 640px">
-            <div class="nova-card">
+        <div class="nova-settings-stack">
+            <section class="nova-card nova-settings-card">
                 <h3>{{ t('settings.profile') }}</h3>
                 <Form
                     action="/user/profile-information"
                     method="put"
                     #default="{ errors, processing }"
                 >
-                    <div class="nova-grid nova-grid-2">
-                        <div>
-                            <label class="form-label" for="name">{{ t('auth.name') }}</label>
+                    <div class="nova-grid nova-grid-2 nova-settings-profile-grid">
+                        <div class="nova-settings-field">
+                            <label class="nova-settings-label" for="name">{{ t('auth.name') }}</label>
                             <input
                                 id="name"
                                 class="form-control"
@@ -50,8 +53,8 @@ function confirmDelete(event: SubmitEvent): void {
                             />
                             <FormErrors :errors="errors.name" />
                         </div>
-                        <div>
-                            <label class="form-label" for="email">{{ t('auth.email') }}</label>
+                        <div class="nova-settings-field">
+                            <label class="nova-settings-label" for="email">{{ t('auth.email') }}</label>
                             <input
                                 id="email"
                                 class="form-control"
@@ -63,71 +66,84 @@ function confirmDelete(event: SubmitEvent): void {
                             <FormErrors :errors="errors.email" />
                         </div>
                     </div>
-                    <p class="nova-muted">{{ t('settings.profileHint') }}</p>
-                    <button class="nova-btn nova-btn-primary" :disabled="processing" type="submit">
-                        {{ t('settings.saveProfile') }}
-                    </button>
+                    <p class="nova-muted nova-settings-hint">{{ t('settings.profileHint') }}</p>
+                    <div class="nova-settings-actions">
+                        <button class="nova-btn nova-btn-primary" :disabled="processing" type="submit">
+                            {{ t('settings.saveProfile') }}
+                        </button>
+                    </div>
                 </Form>
-            </div>
+            </section>
 
-            <div class="nova-card">
-                <div class="nova-row" style="justify-content: space-between">
+            <section class="nova-card nova-settings-card">
+                <div class="nova-settings-row-head">
                     <h3>{{ t('shell.theme') }}</h3>
                     <ThemeSwitcher />
                 </div>
-                <p class="nova-muted">{{ t('settings.themeHint') }}</p>
-            </div>
+                <p class="nova-muted nova-settings-hint">{{ t('settings.themeHint') }}</p>
+            </section>
 
-            <div class="nova-card">
-                <div class="nova-row" style="justify-content: space-between">
+            <section class="nova-card nova-settings-card">
+                <div class="nova-settings-row-head">
                     <h3>{{ t('shell.language') }}</h3>
                     <LanguageSwitcher />
                 </div>
-                <p class="nova-muted">{{ t('settings.languageHint') }}</p>
-            </div>
+                <p class="nova-muted nova-settings-hint">{{ t('settings.languageHint') }}</p>
+            </section>
 
-            <div class="nova-card">
+            <section class="nova-card nova-settings-card">
                 <h3>{{ t('settings.passwordSection') }}</h3>
                 <Form action="/user/password" method="put" #default="{ errors, processing }">
-                    <label class="form-label">{{ t('settings.currentPassword') }}</label>
-                    <PasswordField autocomplete="current-password" name="current_password" />
-                    <FormErrors :errors="errors.current_password" />
+                    <div class="nova-settings-field">
+                        <label class="nova-settings-label">{{ t('settings.currentPassword') }}</label>
+                        <PasswordField autocomplete="current-password" name="current_password" />
+                        <FormErrors :errors="errors.current_password" />
+                    </div>
 
-                    <label class="form-label" style="margin-top: 12px">{{
-                        t('auth.newPassword')
-                    }}</label>
-                    <PasswordField autocomplete="new-password" name="password" />
-                    <FormErrors :errors="errors.password" />
+                    <div class="nova-settings-field">
+                        <label class="nova-settings-label">{{ t('auth.newPassword') }}</label>
+                        <PasswordField autocomplete="new-password" name="password" />
+                        <FormErrors :errors="errors.password" />
+                    </div>
 
-                    <label class="form-label" style="margin-top: 12px">{{
-                        t('auth.confirmPassword')
-                    }}</label>
-                    <PasswordField autocomplete="new-password" name="password_confirmation" />
+                    <div class="nova-settings-field">
+                        <label class="nova-settings-label">{{ t('auth.confirmPassword') }}</label>
+                        <PasswordField autocomplete="new-password" name="password_confirmation" />
+                    </div>
 
-                    <br />
-                    <button class="nova-btn" :disabled="processing" type="submit">
-                        {{ t('settings.updatePassword') }}
-                    </button>
+                    <div class="nova-settings-actions">
+                        <button class="nova-btn nova-btn-primary" :disabled="processing" type="submit">
+                            {{ t('settings.updatePassword') }}
+                        </button>
+                    </div>
                 </Form>
-            </div>
+            </section>
 
-            <div class="nova-card" style="border-color: #b91c1c">
-                <h3 style="color: #b91c1c">{{ t('settings.dangerTitle') }}</h3>
-                <p class="nova-muted">{{ t('settings.dangerText') }}</p>
+            <section class="nova-card nova-settings-card is-danger">
+                <h3>{{ t('settings.dangerTitle') }}</h3>
+                <p class="nova-muted nova-settings-hint">{{ t('settings.dangerText') }}</p>
                 <Form
                     action="/settings/account"
                     method="delete"
                     #default="{ errors, processing }"
                     @submit="confirmDelete"
                 >
-                    <PasswordField autocomplete="current-password" name="password" />
-                    <FormErrors :errors="errors.password" />
-                    <br />
-                    <button class="nova-btn" :disabled="processing" style="border-color: #b91c1c" type="submit">
-                        {{ t('settings.deleteAccount') }}
-                    </button>
+                    <div class="nova-settings-field">
+                        <label class="nova-settings-label">{{ t('settings.currentPassword') }}</label>
+                        <PasswordField autocomplete="current-password" name="password" />
+                        <FormErrors :errors="errors.password" />
+                    </div>
+                    <div class="nova-settings-actions">
+                        <button
+                            class="nova-btn nova-settings-danger-btn"
+                            :disabled="processing"
+                            type="submit"
+                        >
+                            {{ t('settings.deleteAccount') }}
+                        </button>
+                    </div>
                 </Form>
-            </div>
+            </section>
         </div>
     </div>
 </template>

@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Contracts\GeminiClient;
+use App\Gemini\FakeGeminiClient;
+use App\Gemini\HttpGeminiClient;
 use App\Listeners\CreateWalletForNewUser;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Registered;
@@ -18,7 +21,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(GeminiClient::class, function () {
+            if (config('nova.gemini.fake') || app()->environment('testing')) {
+                return new FakeGeminiClient;
+            }
+
+            return new HttpGeminiClient(
+                apiKey: config('nova.gemini.api_key'),
+                model: (string) config('nova.gemini.model'),
+                timeoutSeconds: (int) config('nova.gemini.request_timeout_seconds'),
+            );
+        });
     }
 
     /**

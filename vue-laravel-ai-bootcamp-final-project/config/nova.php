@@ -1,15 +1,24 @@
 <?php
 
 return [
+    'admin' => [
+        'max_credit_adjustment' => (int) env('NOVA_ADMIN_MAX_CREDIT_ADJUSTMENT', 500),
+    ],
+    'stripe' => [
+        'fake' => (bool) env('STRIPE_FAKE', false),
+        'key' => env('STRIPE_KEY'),
+        'secret' => env('STRIPE_SECRET'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+    ],
     'gemini' => [
-        'fake' => (bool) env('GEMINI_FAKE', false),
         'api_key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
-        'request_timeout_seconds' => (int) env('GEMINI_REQUEST_TIMEOUT', 120),
+        'model' => env('GEMINI_MODEL'),
+        'request_timeout_seconds' => (int) env('GEMINI_REQUEST_TIMEOUT', env('AI_REQUEST_TIMEOUT', 60)),
         'reservation_timeout_minutes' => (int) env('GEMINI_RESERVATION_TIMEOUT_MINUTES', 5),
     ],
     'generation' => [
         'max_concurrent_per_user' => (int) env('GENERATION_MAX_CONCURRENT', 1),
+        'stuck_timeout_minutes' => (int) env('GENERATION_STUCK_TIMEOUT_MINUTES', 2),
         'topic_max_length' => 1000,
         'output_max_length' => 50000,
     ],

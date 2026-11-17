@@ -33,10 +33,7 @@ class GenerationController extends Controller
                 'message' => $exception->getMessage(),
             ], 422);
         } catch (GenerationConcurrencyException $exception) {
-            return response()->json([
-                'code' => 'concurrency_limit',
-                'message' => $exception->getMessage(),
-            ], 429);
+            return $this->concurrencyLimitResponse($request);
         }
 
         return response()->json([
@@ -151,10 +148,7 @@ class GenerationController extends Controller
                 'message' => $exception->getMessage(),
             ], 422);
         } catch (GenerationConcurrencyException $exception) {
-            return response()->json([
-                'code' => 'concurrency_limit',
-                'message' => $exception->getMessage(),
-            ], 429);
+            return $this->concurrencyLimitResponse($request);
         }
 
         return response()->json([
@@ -162,5 +156,16 @@ class GenerationController extends Controller
             'status' => $next->status->value,
             'stream_url' => route('generations.stream', $next),
         ], 201);
+    }
+
+    protected function concurrencyLimitResponse(Request $request): JsonResponse
+    {
+        $active = $this->generations->activeGenerationForUser($request->user());
+
+        return response()->json([
+            'code' => 'concurrency_limit',
+            'message' => (new GenerationConcurrencyException)->getMessage(),
+            'active_generation_id' => $active?->id,
+        ], 429);
     }
 }

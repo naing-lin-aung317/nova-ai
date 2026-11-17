@@ -3,9 +3,12 @@ import type { GenerationCreatePayload, StreamDoneEvent } from '@/types/generatio
 export class GenerationApiError extends Error {
     code?: string;
 
-    constructor(message: string, code?: string) {
+    activeGenerationId?: number;
+
+    constructor(message: string, code?: string, activeGenerationId?: number) {
         super(message);
         this.code = code;
+        this.activeGenerationId = activeGenerationId;
     }
 }
 
@@ -45,10 +48,15 @@ export async function createGeneration(
         status?: string;
         code?: string;
         message?: string;
+        active_generation_id?: number;
     };
 
     if (! response.ok) {
-        throw new GenerationApiError(body.message ?? 'Request failed', body.code);
+        throw new GenerationApiError(
+            body.message ?? 'Request failed',
+            body.code,
+            body.active_generation_id,
+        );
     }
 
     return {
@@ -59,11 +67,17 @@ export async function createGeneration(
 }
 
 export async function cancelGeneration(id: number): Promise<void> {
-    await fetch(`/generations/${id}/cancel`, {
+    const response = await fetch(`/generations/${id}/cancel`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: jsonHeaders(),
     });
+
+    if (! response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { message?: string };
+
+        throw new GenerationApiError(body.message ?? 'Cancel failed');
+    }
 }
 
 export async function regenerateGeneration(
@@ -80,10 +94,15 @@ export async function regenerateGeneration(
         stream_url?: string;
         code?: string;
         message?: string;
+        active_generation_id?: number;
     };
 
     if (! response.ok) {
-        throw new GenerationApiError(body.message ?? 'Request failed', body.code);
+        throw new GenerationApiError(
+            body.message ?? 'Request failed',
+            body.code,
+            body.active_generation_id,
+        );
     }
 
     return {

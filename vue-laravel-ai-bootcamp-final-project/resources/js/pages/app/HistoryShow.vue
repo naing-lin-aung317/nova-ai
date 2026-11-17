@@ -9,6 +9,7 @@ import {
     streamGeneration,
 } from '@/lib/generationStream';
 import type { GenerationDetail } from '@/types/generation';
+import { generationFailureMessage } from '@/utils/generationErrors';
 
 defineOptions({ layout: AppLayout });
 
@@ -22,6 +23,10 @@ const outputDraft = ref(props.generation.output_text ?? '');
 const streaming = ref(false);
 const streamPreview = ref('');
 const errorMessage = ref('');
+
+const failureNotice = computed(() =>
+    generationFailureMessage(props.generation.failure_reason, t),
+);
 
 const displayOutput = computed(() => {
     if (streaming.value) {
@@ -91,7 +96,7 @@ async function onRegenerate(): Promise<void> {
         </Link>
 
         <p v-if="generation.failure_reason" class="nova-alert" style="margin-top: 12px">
-            {{ generation.failure_reason }}
+            {{ failureNotice }}
         </p>
 
         <p v-if="errorMessage" class="nova-alert" style="margin-top: 12px">{{ errorMessage }}</p>

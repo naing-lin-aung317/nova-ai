@@ -15,7 +15,7 @@ onBeforeUnmount(stop);
 </script>
 
 <template>
-    <div>
+    <div class="nova-admin">
         <MobileTopBar admin @toggle="menuOpen = !menuOpen" />
         <div class="nova-shell">
             <SideNav

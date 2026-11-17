@@ -15,8 +15,10 @@ const { t } = useI18n();
             <p>
                 <Link href="/">← {{ t('shell.backHome') }}</Link>
             </p>
-            <LanguageSwitcher />
-            <ThemeSwitcher />
+            <div class="nova-pref-toggles-row" style="max-width: 320px">
+                <LanguageSwitcher />
+                <ThemeSwitcher />
+            </div>
         </div>
     </div>
 </template>

@@ -43,7 +43,8 @@ test('users can update and delete their own custom tones', function () {
             'name' => 'After',
             'description' => 'Updated',
         ])
-        ->assertRedirect(route('tones', ['edit' => $tone->id]));
+        ->assertRedirect(route('tones'))
+        ->assertSessionHas('status', 'tones.updatedSuccess');
 
     expect($tone->fresh()->name)->toBe('After');
 

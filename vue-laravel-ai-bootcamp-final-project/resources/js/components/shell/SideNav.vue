@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWallet } from '@/composables/useWallet';
 import LanguageSwitcher from '@/components/shell/LanguageSwitcher.vue';
 import ThemeSwitcher from '@/components/shell/ThemeSwitcher.vue';
 import type { NavItem } from '@/shell/navigation';
+import type { AuthUser } from '@/types/auth';
 
 defineProps<{
     items: NavItem[];
@@ -19,6 +21,12 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const page = usePage();
 const { availableCredits } = useWallet();
+
+const isSuperAdmin = computed(() => {
+    const user = (page.props.auth as { user: AuthUser | null }).user;
+
+    return user?.role === 'super_admin';
+});
 
 function isActive(href: string): boolean {
     return page.url.split('?')[0] === href;
@@ -42,6 +50,14 @@ function isActive(href: string): boolean {
             {{ t(item.label) }}
         </Link>
         <div class="nova-side-spacer"></div>
+        <Link
+            v-if="isSuperAdmin && !admin"
+            class="nova-side-admin-link"
+            href="/admin"
+            @click="emit('navigate')"
+        >
+            {{ t('nav.adminPanel') }}
+        </Link>
         <Link v-if="admin" href="/dashboard" @click="emit('navigate')">
             ← {{ t('nav.backToApp') }}
         </Link>
@@ -49,8 +65,10 @@ function isActive(href: string): boolean {
             <p class="nova-muted">{{ t('nav.credits') }}</p>
             <p class="nova-credits">{{ availableCredits }}</p>
         </div>
-        <LanguageSwitcher />
-        <ThemeSwitcher />
+        <div class="nova-pref-toggles-row nova-side-prefs">
+            <LanguageSwitcher />
+            <ThemeSwitcher />
+        </div>
         <Link
             v-if="!admin"
             as="button"

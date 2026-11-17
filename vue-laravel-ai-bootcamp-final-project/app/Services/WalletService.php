@@ -9,8 +9,11 @@ use App\Models\CreditReservation;
 use App\Models\CreditTransaction;
 use App\Models\CreditWallet;
 use App\Models\GenerationRequest;
+use App\Models\PaymentOrder;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class WalletService
 {
@@ -227,6 +230,165 @@ class WalletService
                 'idempotency_key' => $reservation->idempotency_key.':capture',
                 'description' => 'Generation completed',
                 'metadata' => ['generation_request_id' => $reservation->generation_request_id],
+            ]);
+        });
+    }
+
+    public function adminAdjustment(User $user, int $delta, string $reason): CreditTransaction
+    {
+        $max = (int) config('nova.admin.max_credit_adjustment', 500);
+
+        if (abs($delta) > $max) {
+            throw ValidationException::withMessages([
+                'delta' => ["Adjustment cannot exceed ±{$max} credits."],
+            ]);
+        }
+
+        if ($delta === 0) {
+            throw ValidationException::withMessages([
+                'delta' => ['Adjustment must not be zero.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($user, $delta, $reason): CreditTransaction {
+            $wallet = CreditWallet::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($wallet === null) {
+                $wallet = $this->ensureWallet($user);
+                $wallet = CreditWallet::query()->whereKey($wallet->id)->lockForUpdate()->firstOrFail();
+            }
+
+            $wallet->available_balance += $delta;
+            $wallet->save();
+
+            return CreditTransaction::query()->create([
+                'credit_wallet_id' => $wallet->id,
+                'user_id' => $user->id,
+                'type' => CreditTransactionType::AdminAdjustment,
+                'amount' => $delta,
+                'available_balance_after' => $wallet->available_balance,
+                'reserved_balance_after' => $wallet->reserved_balance,
+                'idempotency_key' => 'admin_adjustment:'.Str::uuid()->toString(),
+                'description' => $reason,
+                'metadata' => ['reason' => $reason],
+            ]);
+        });
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function walletIdsWithLedgerMismatch(): array
+    {
+        $mismatchIds = [];
+
+        CreditWallet::query()
+            ->whereNotNull('user_id')
+            ->orderBy('id')
+            ->chunkById(100, function ($wallets) use (&$mismatchIds): void {
+                foreach ($wallets as $wallet) {
+                    if (! $this->ledgerMatchesWallet($wallet)) {
+                        $mismatchIds[] = $wallet->id;
+                    }
+                }
+            });
+
+        return $mismatchIds;
+    }
+
+    public function grantPurchase(PaymentOrder $order): CreditTransaction
+    {
+        return DB::transaction(function () use ($order): CreditTransaction {
+            $order = PaymentOrder::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            $idempotencyKey = 'purchase:order:'.$order->id;
+
+            $existing = CreditTransaction::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->first();
+
+            if ($existing !== null) {
+                return $existing;
+            }
+
+            $wallet = CreditWallet::query()
+                ->where('user_id', $order->user_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($wallet === null) {
+                $wallet = $this->ensureWallet($order->user);
+                $wallet = CreditWallet::query()->whereKey($wallet->id)->lockForUpdate()->firstOrFail();
+            }
+
+            $wallet->available_balance += $order->credits_to_issue;
+            $wallet->save();
+
+            return CreditTransaction::query()->create([
+                'credit_wallet_id' => $wallet->id,
+                'user_id' => $order->user_id,
+                'type' => CreditTransactionType::Purchase,
+                'amount' => $order->credits_to_issue,
+                'available_balance_after' => $wallet->available_balance,
+                'reserved_balance_after' => $wallet->reserved_balance,
+                'idempotency_key' => $idempotencyKey,
+                'description' => 'Credit package purchase',
+                'metadata' => [
+                    'payment_order_id' => $order->id,
+                    'credit_package_id' => $order->credit_package_id,
+                ],
+            ]);
+        });
+    }
+
+    public function clawBackPurchase(
+        PaymentOrder $order,
+        CreditTransactionType $type,
+        string $description,
+    ): ?CreditTransaction {
+        if ($type !== CreditTransactionType::Refund && $type !== CreditTransactionType::Chargeback) {
+            throw new \InvalidArgumentException('Clawback type must be refund or chargeback.');
+        }
+
+        $suffix = $type === CreditTransactionType::Refund ? 'refund' : 'chargeback';
+        $idempotencyKey = 'purchase:order:'.$order->id.':'.$suffix;
+
+        if (CreditTransaction::query()->where('idempotency_key', $idempotencyKey)->exists()) {
+            return CreditTransaction::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->first();
+        }
+
+        return DB::transaction(function () use ($order, $type, $description, $idempotencyKey): CreditTransaction {
+            $wallet = CreditWallet::query()
+                ->where('user_id', $order->user_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($wallet === null) {
+                $wallet = $this->ensureWallet($order->user);
+                $wallet = CreditWallet::query()->whereKey($wallet->id)->lockForUpdate()->firstOrFail();
+            }
+
+            $wallet->available_balance -= $order->credits_to_issue;
+            $wallet->save();
+
+            return CreditTransaction::query()->create([
+                'credit_wallet_id' => $wallet->id,
+                'user_id' => $order->user_id,
+                'type' => $type,
+                'amount' => -$order->credits_to_issue,
+                'available_balance_after' => $wallet->available_balance,
+                'reserved_balance_after' => $wallet->reserved_balance,
+                'idempotency_key' => $idempotencyKey,
+                'description' => $description,
+                'metadata' => [
+                    'payment_order_id' => $order->id,
+                    'credit_package_id' => $order->credit_package_id,
+                ],
             ]);
         });
     }

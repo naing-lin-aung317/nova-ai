@@ -10,5 +10,6 @@ enum CreditTransactionType: string
     case Capture = 'capture';
     case Release = 'release';
     case Refund = 'refund';
+    case Chargeback = 'chargeback';
     case AdminAdjustment = 'admin_adjustment';
 }

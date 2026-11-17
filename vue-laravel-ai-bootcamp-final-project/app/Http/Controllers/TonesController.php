@@ -40,8 +40,9 @@ class TonesController extends Controller
             'customTones' => $request->user()
                 ->customTones()
                 ->orderBy('name')
-                ->get(['id', 'name', 'description']),
+                ->get(['id', 'name', 'description', 'sample_content']),
             'editing' => $editing,
+            'creating' => $request->boolean('new'),
         ]);
     }
 
@@ -54,9 +55,13 @@ class TonesController extends Controller
 
     public function update(UpdateCustomToneRequest $request, CustomTone $customTone): RedirectResponse
     {
+        $this->authorize('update', $customTone);
+
         $customTone->update($request->validated());
 
-        return redirect()->route('tones', ['edit' => $customTone->id]);
+        return redirect()
+            ->route('tones')
+            ->with('status', 'tones.updatedSuccess');
     }
 
     public function destroy(CustomTone $customTone): RedirectResponse

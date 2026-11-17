@@ -93,6 +93,14 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->hasMany(CustomTone::class);
     }
 
+    /**
+     * @return HasMany<GenerationRequest, $this>
+     */
+    public function generationRequests(): HasMany
+    {
+        return $this->hasMany(GenerationRequest::class);
+    }
+
     protected static function booted(): void
     {
         static::updated(function (User $user): void {

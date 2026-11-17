@@ -14,8 +14,10 @@ class ReleaseStaleCreditReservations extends Command
     public function handle(GenerationService $generations): int
     {
         $count = $generations->releaseStale();
+        $stuck = $generations->releaseStuckGenerations();
 
         $this->info("Released {$count} stale generation reservation(s).");
+        $this->info("Failed {$stuck} stuck generation(s).");
 
         return self::SUCCESS;
     }

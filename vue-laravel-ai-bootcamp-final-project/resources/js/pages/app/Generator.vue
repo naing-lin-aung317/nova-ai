@@ -14,6 +14,7 @@ import {
 } from '@/lib/generationStream';
 import type { SharedWallet } from '@/types/wallet';
 import type { GenerationCreatePayload, ToneOption } from '@/types/generation';
+import { generationFailureMessage } from '@/utils/generationErrors';
 
 defineOptions({ layout: AppLayout });
 
@@ -23,9 +24,16 @@ type ResumeState = {
     output_text: string | null;
 };
 
+type ActiveGenerationState = {
+    id: number;
+    status: string;
+};
+
 type GeneratorPrefill = {
     content_type: string | null;
     topic: string | null;
+    built_in_tone_id: number | null;
+    custom_tone_id: number | null;
 };
 
 const props = defineProps<{
@@ -35,6 +43,7 @@ const props = defineProps<{
     contentLanguages: string[];
     contentLengths: string[];
     resume: ResumeState | null;
+    activeGeneration: ActiveGenerationState | null;
     briefMaxLength: number;
     prefill: GeneratorPrefill;
     lengthHintsByType: Record<string, Record<string, string>>;
@@ -50,9 +59,9 @@ const wallet = computed(
 const contentType = ref(props.contentTypes[0] ?? 'facebook_post');
 const contentLanguage = ref('en');
 const contentLength = ref('medium');
-const toneKind = ref<'built_in' | 'custom'>('built_in');
-const builtInToneId = ref<number | null>(props.builtInTones[0]?.id ?? null);
-const customToneId = ref<number | null>(props.customTones[0]?.id ?? null);
+const toneKind = ref<'built_in' | 'custom' | 'none'>('built_in');
+const builtInToneId = ref<number | null>(null);
+const customToneId = ref<number | null>(null);
 const brief = ref(props.prefill.topic ?? '');
 
 if (props.prefill.content_type && props.contentTypes.includes(props.prefill.content_type)) {
@@ -63,37 +72,74 @@ function toneKey(kind: 'built_in' | 'custom', id: number): string {
     return `${kind}:${id}`;
 }
 
-const selectedToneKey = ref(
-    props.builtInTones[0]
-        ? toneKey('built_in', props.builtInTones[0].id)
-        : props.customTones[0]
-          ? toneKey('custom', props.customTones[0].id)
-          : '',
+function defaultToneKey(): string {
+    const friendly = props.builtInTones.find((tone) => tone.name === 'Friendly');
+
+    if (friendly) {
+        return toneKey('built_in', friendly.id);
+    }
+
+    if (props.builtInTones[0]) {
+        return toneKey('built_in', props.builtInTones[0].id);
+    }
+
+    if (props.customTones[0]) {
+        return toneKey('custom', props.customTones[0].id);
+    }
+
+    return 'none';
+}
+
+const selectedToneKey = ref(defaultToneKey());
+
+if (
+    props.prefill.built_in_tone_id
+    && props.builtInTones.some((tone) => tone.id === props.prefill.built_in_tone_id)
+) {
+    selectedToneKey.value = toneKey('built_in', props.prefill.built_in_tone_id);
+}
+
+if (
+    props.prefill.custom_tone_id
+    && props.customTones.some((tone) => tone.id === props.prefill.custom_tone_id)
+) {
+    selectedToneKey.value = toneKey('custom', props.prefill.custom_tone_id);
+}
+
+watch(
+    selectedToneKey,
+    (key) => {
+        if (key === 'none' || key === '') {
+            toneKind.value = 'none';
+            builtInToneId.value = null;
+            customToneId.value = null;
+
+            return;
+        }
+
+        const [kind, idPart] = key.split(':');
+        const id = Number(idPart);
+
+        if (kind === 'built_in') {
+            toneKind.value = 'built_in';
+            builtInToneId.value = id;
+            customToneId.value = null;
+        } else if (kind === 'custom') {
+            toneKind.value = 'custom';
+            customToneId.value = id;
+            builtInToneId.value = null;
+        }
+    },
+    { immediate: true },
 );
-
-watch(selectedToneKey, (key) => {
-    if (! key) {
-        return;
-    }
-
-    const [kind, idPart] = key.split(':');
-    const id = Number(idPart);
-
-    if (kind === 'built_in') {
-        toneKind.value = 'built_in';
-        builtInToneId.value = id;
-        customToneId.value = null;
-    } else if (kind === 'custom') {
-        toneKind.value = 'custom';
-        customToneId.value = id;
-        builtInToneId.value = null;
-    }
-});
 
 const phase = ref<'idle' | 'generating' | 'done' | 'failed' | 'no_credits'>('idle');
 const outputText = ref('');
 const activeGenerationId = ref<number | null>(null);
 const errorMessage = ref('');
+const concurrencyBlocked = ref(false);
+const blockingGenerationId = ref<number | null>(null);
+const cancellingActive = ref(false);
 const formErrors = ref<string[]>([]);
 const abortController = ref<AbortController | null>(null);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -103,14 +149,101 @@ const canGenerate = computed(
     () => hasCredits.value && phase.value !== 'generating' && brief.value.trim() !== '',
 );
 
-const lengthHint = computed(() => {
-    const byType = props.lengthHintsByType[contentType.value]
-        ?? props.lengthHintsByType.default;
+const outputEmpty = computed(() => outputText.value.trim() === '');
 
-    return byType?.[contentLength.value] ?? '';
+const wizardStep = ref(1);
+
+const selectedToneName = computed(() => {
+    if (toneKind.value === 'none') {
+        return t('generator.noTone');
+    }
+
+    if (toneKind.value === 'built_in' && builtInToneId.value !== null) {
+        return (
+            props.builtInTones.find((tone) => tone.id === builtInToneId.value)?.name ?? '—'
+        );
+    }
+
+    if (toneKind.value === 'custom' && customToneId.value !== null) {
+        return (
+            props.customTones.find((tone) => tone.id === customToneId.value)?.name ?? '—'
+        );
+    }
+
+    return t('generator.noTone');
 });
 
-const outputEmpty = computed(() => outputText.value.trim() === '');
+const summaryLengthLabel = computed(() => t(`generator.lengths.${contentLength.value}`));
+
+const styleStepSummary = computed(
+    () =>
+        `${t(`generator.languages.${contentLanguage.value}`)} · ${summaryLengthLabel.value} · ${selectedToneName.value}`,
+);
+
+const stepperTypeValue = computed(() =>
+    wizardStep.value > 1 ? t(`generator.types.${contentType.value}`) : '',
+);
+
+const stepperStyleValue = computed(() => (wizardStep.value > 2 ? styleStepSummary.value : ''));
+
+const stepperBriefValue = computed(() =>
+    wizardStep.value === 3 ? t('generator.stepBriefTitle') : '',
+);
+
+const resultMetaLine = computed(() =>
+    t('generator.resultMeta', {
+        type: t(`generator.types.${contentType.value}`),
+        language: t(`generator.languages.${contentLanguage.value}`),
+        length: summaryLengthLabel.value,
+        tone: selectedToneName.value,
+    }),
+);
+
+const creditsLeftLine = computed(() =>
+    t('generator.creditsLeft', { count: wallet.value?.available ?? 0 }),
+);
+
+const cancelTargetId = computed((): number | null => {
+    if (blockingGenerationId.value !== null) {
+        return blockingGenerationId.value;
+    }
+
+    if (props.activeGeneration !== null) {
+        return props.activeGeneration.id;
+    }
+
+    if (phase.value === 'generating' && activeGenerationId.value !== null) {
+        return activeGenerationId.value;
+    }
+
+    return null;
+});
+
+const showActiveGenerationBar = computed(() => cancelTargetId.value !== null);
+
+function customToneDescription(tone: ToneOption): string {
+    return tone.description?.trim() || t('generator.customToneDefaultDesc');
+}
+
+function goNext(): void {
+    if (wizardStep.value < 3) {
+        wizardStep.value += 1;
+        formErrors.value = [];
+    }
+}
+
+function goBack(): void {
+    if (wizardStep.value > 1 && phase.value !== 'generating') {
+        wizardStep.value -= 1;
+        formErrors.value = [];
+    }
+}
+
+function typeDescriptionKey(type: string): string {
+    const key = `generator.typeDescriptions.${type}`;
+
+    return t(key) !== key ? key : '';
+}
 
 function buildPayload(): GenerationCreatePayload {
     const payload: GenerationCreatePayload = {
@@ -178,8 +311,7 @@ async function runStream(streamUrl: string, generationId: number): Promise<void>
         } else if (done.status === 'failed' || done.status === 'stopped') {
             phase.value = 'failed';
             const latest = await fetchGeneration(generationId);
-            errorMessage.value =
-                latest.failure_reason ?? t('generator.failedDefault');
+            errorMessage.value = generationFailureMessage(latest.failure_reason, t);
         }
 
         refreshWallet();
@@ -193,7 +325,10 @@ async function runStream(streamUrl: string, generationId: number): Promise<void>
 
                 if (latest.status === 'stopped') {
                     phase.value = 'failed';
-                    errorMessage.value = latest.failure_reason ?? t('generator.stopped');
+                    errorMessage.value =
+                        latest.status === 'stopped'
+                            ? t('generator.stopped')
+                            : generationFailureMessage(latest.failure_reason, t);
                 }
             } catch {
                 phase.value = 'idle';
@@ -217,6 +352,7 @@ async function runStream(streamUrl: string, generationId: number): Promise<void>
 
 async function onGenerate(): Promise<void> {
     formErrors.value = [];
+    wizardStep.value = 3;
 
     if (! hasCredits.value) {
         phase.value = 'no_credits';
@@ -226,15 +362,6 @@ async function onGenerate(): Promise<void> {
 
     if (brief.value.trim() === '') {
         formErrors.value = [t('generator.topicRequired')];
-
-        return;
-    }
-
-    if (
-        (toneKind.value === 'built_in' && builtInToneId.value === null)
-        || (toneKind.value === 'custom' && customToneId.value === null)
-    ) {
-        formErrors.value = [t('generator.toneRequired')];
 
         return;
     }
@@ -252,6 +379,8 @@ async function onGenerate(): Promise<void> {
 
             if (error.code === 'concurrency_limit') {
                 errorMessage.value = t('generator.concurrency');
+                concurrencyBlocked.value = true;
+                blockingGenerationId.value = error.activeGenerationId ?? null;
                 phase.value = 'failed';
 
                 return;
@@ -267,8 +396,41 @@ async function onStop(): Promise<void> {
         return;
     }
 
-    abortController.value?.abort();
-    await cancelGeneration(activeGenerationId.value);
+    await onCancelActiveGeneration();
+}
+
+async function onCancelActiveGeneration(): Promise<void> {
+    const id = cancelTargetId.value;
+
+    if (id === null || cancellingActive.value) {
+        return;
+    }
+
+    cancellingActive.value = true;
+
+    try {
+        abortController.value?.abort();
+        await cancelGeneration(id);
+
+        if (activeGenerationId.value === id) {
+            activeGenerationId.value = null;
+            outputText.value = '';
+        }
+
+        blockingGenerationId.value = null;
+        concurrencyBlocked.value = false;
+        errorMessage.value = '';
+        formErrors.value = [];
+        phase.value = 'idle';
+        refreshWallet();
+        router.reload({ only: ['activeGeneration', 'wallet'] });
+    } catch (error) {
+        formErrors.value = [
+            error instanceof GenerationApiError ? error.message : t('generator.cancelActiveFailed'),
+        ];
+    } finally {
+        cancellingActive.value = false;
+    }
 }
 
 async function onRegenerate(): Promise<void> {
@@ -284,8 +446,19 @@ async function onRegenerate(): Promise<void> {
         const next = await regenerateGeneration(activeGenerationId.value);
         await runStream(next.stream_url, next.id);
     } catch (error) {
-        if (error instanceof GenerationApiError && error.code === 'insufficient_credits') {
-            phase.value = 'no_credits';
+        if (error instanceof GenerationApiError) {
+            if (error.code === 'insufficient_credits') {
+                phase.value = 'no_credits';
+
+                return;
+            }
+
+            if (error.code === 'concurrency_limit') {
+                errorMessage.value = t('generator.concurrency');
+                concurrencyBlocked.value = true;
+                blockingGenerationId.value = error.activeGenerationId ?? null;
+                phase.value = 'failed';
+            }
         }
     }
 }
@@ -305,8 +478,8 @@ onUnmounted(() => {
 <template>
     <div class="nova-gen">
         <header class="nova-gen-header">
-            <h2 class="nova-gen-page-title">{{ t('generator.pageTitle') }}</h2>
-            <p class="nova-muted" style="margin-top: 8px">{{ t('generator.subtitle') }}</p>
+            <h1 class="nova-gen-page-title">{{ t('generator.pageTitle') }}</h1>
+            <p class="nova-gen-subtitle">{{ t('generator.subtitle') }}</p>
         </header>
 
         <div
@@ -319,26 +492,159 @@ onUnmounted(() => {
 
         <FormErrors v-if="formErrors.length" :errors="formErrors" />
 
-        <div class="nova-grid nova-gen-grid">
-            <div class="nova-card nova-gen-panel">
-                <form class="nova-gen-form" @submit.prevent="onGenerate">
-                    <div class="nova-gen-form-fields">
-                        <div class="nova-gen-field">
-                            <label class="nova-gen-label" for="content-type">
-                                {{ t('generator.contentType') }}
-                            </label>
-                            <select
-                                id="content-type"
-                                v-model="contentType"
-                                class="form-select"
-                                :disabled="phase === 'generating'"
-                            >
-                                <option v-for="type in contentTypes" :key="type" :value="type">
-                                    {{ t(`generator.types.${type}`) }} ({{ t('generator.creditBadge') }})
-                                </option>
-                            </select>
-                        </div>
+        <div v-if="showActiveGenerationBar" class="nova-gen-active-bar">
+            <p class="nova-gen-active-bar-text">
+                {{
+                    concurrencyBlocked
+                        ? t('generator.concurrency')
+                        : t('generator.activeGenerationHint')
+                }}
+            </p>
+            <button
+                type="button"
+                class="nova-btn nova-gen-cancel-active-btn"
+                :disabled="cancellingActive"
+                @click="onCancelActiveGeneration"
+            >
+                {{
+                    cancellingActive
+                        ? t('generator.cancellingActive')
+                        : t('generator.cancelActive')
+                }}
+            </button>
+        </div>
 
+        <nav class="nova-gen-stepper" aria-label="Generation steps">
+            <ol class="nova-gen-stepper-list">
+                <li
+                    class="nova-gen-step"
+                    :class="{
+                        'is-active': wizardStep === 1,
+                        'is-done': wizardStep > 1,
+                    }"
+                >
+                    <div class="nova-gen-step-head">
+                        <span class="nova-gen-step-marker" aria-hidden="true">
+                            <svg
+                                v-if="wizardStep > 1"
+                                class="nova-gen-step-check"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                            >
+                                <path
+                                    d="M3.5 8.5 6.5 11.5 12.5 4.5"
+                                    stroke="currentColor"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                />
+                            </svg>
+                            <template v-else>1</template>
+                        </span>
+                        <span class="nova-gen-step-label">{{ t('generator.stepType') }}</span>
+                    </div>
+                    <p v-if="stepperTypeValue" class="nova-gen-step-value">{{ stepperTypeValue }}</p>
+                </li>
+                <li
+                    class="nova-gen-step"
+                    :class="{
+                        'is-active': wizardStep === 2,
+                        'is-done': wizardStep > 2 || phase === 'done',
+                    }"
+                >
+                    <div class="nova-gen-step-head">
+                        <span class="nova-gen-step-marker" aria-hidden="true">
+                            <svg
+                                v-if="wizardStep > 2 || phase === 'done'"
+                                class="nova-gen-step-check"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                            >
+                                <path
+                                    d="M3.5 8.5 6.5 11.5 12.5 4.5"
+                                    stroke="currentColor"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                />
+                            </svg>
+                            <template v-else>2</template>
+                        </span>
+                        <span class="nova-gen-step-label">{{ t('generator.stepStyle') }}</span>
+                    </div>
+                    <p v-if="stepperStyleValue" class="nova-gen-step-value">{{ stepperStyleValue }}</p>
+                </li>
+                <li
+                    class="nova-gen-step"
+                    :class="{
+                        'is-active': wizardStep === 3 && phase !== 'done',
+                        'is-done': phase === 'done',
+                    }"
+                >
+                    <div class="nova-gen-step-head">
+                        <span class="nova-gen-step-marker" aria-hidden="true">
+                            <svg
+                                v-if="phase === 'done'"
+                                class="nova-gen-step-check"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                            >
+                                <path
+                                    d="M3.5 8.5 6.5 11.5 12.5 4.5"
+                                    stroke="currentColor"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                />
+                            </svg>
+                            <template v-else>3</template>
+                        </span>
+                        <span class="nova-gen-step-label">{{ t('generator.stepBrief') }}</span>
+                    </div>
+                    <p v-if="stepperBriefValue" class="nova-gen-step-value">{{ stepperBriefValue }}</p>
+                </li>
+            </ol>
+        </nav>
+
+        <div class="nova-gen-layout">
+            <div class="nova-card nova-gen-panel nova-gen-wizard">
+                <form class="nova-gen-form" @submit.prevent="onGenerate">
+                    <div v-if="wizardStep === 1" class="nova-gen-step-body">
+                        <h2 class="nova-gen-step-title">{{ t('generator.stepTypeTitle') }}</h2>
+                        <div
+                            class="nova-gen-type-list"
+                            role="radiogroup"
+                            :aria-label="t('generator.contentType')"
+                        >
+                            <button
+                                v-for="type in contentTypes"
+                                :key="type"
+                                type="button"
+                                role="radio"
+                                class="nova-gen-type-option"
+                                :class="{ 'is-selected': contentType === type }"
+                                :aria-checked="contentType === type"
+                                :disabled="phase === 'generating'"
+                                @click="contentType = type"
+                            >
+                                <span class="nova-gen-type-radio" aria-hidden="true" />
+                                <span class="nova-gen-type-copy">
+                                    <span class="nova-gen-type-name">
+                                        {{ t(`generator.types.${type}`) }}
+                                    </span>
+                                    <span
+                                        v-if="typeDescriptionKey(type)"
+                                        class="nova-gen-type-desc"
+                                    >
+                                        {{ t(typeDescriptionKey(type)) }}
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-else-if="wizardStep === 2" class="nova-gen-step-body">
+                        <h2 class="nova-gen-step-title">{{ t('generator.stepStyleTitle') }}</h2>
                         <div class="nova-gen-field">
                             <label class="nova-gen-label" for="content-lang">
                                 {{ t('generator.contentLanguage') }}
@@ -355,7 +661,7 @@ onUnmounted(() => {
                             </select>
                         </div>
 
-                        <div class="nova-gen-field">
+                        <div class="nova-gen-field nova-gen-field-length">
                             <span class="nova-gen-label">{{ t('generator.length') }}</span>
                             <div
                                 class="nova-seg nova-gen-seg"
@@ -373,43 +679,102 @@ onUnmounted(() => {
                                     {{ t(`generator.lengths.${len}`) }}
                                 </button>
                             </div>
-                            <p class="nova-gen-length-hint">{{ lengthHint }}</p>
                         </div>
 
-                        <div class="nova-gen-field">
-                            <label class="nova-gen-label" for="tone-select">
-                                {{ t('generator.toneOptional') }}
-                            </label>
-                            <select
-                                id="tone-select"
-                                v-model="selectedToneKey"
-                                class="form-select"
-                                :disabled="phase === 'generating'"
+                        <div class="nova-gen-field nova-gen-field-tone">
+                            <div class="nova-gen-tone-head">
+                                <span class="nova-gen-label nova-gen-label-inline">
+                                    {{ t('generator.toneOptional') }}
+                                </span>
+                                <Link class="nova-gen-manage-tones" href="/tones">
+                                    {{ t('generator.manageTones') }}
+                                </Link>
+                            </div>
+                            <div
+                                class="nova-gen-tone-grid"
+                                role="radiogroup"
+                                :aria-label="t('generator.toneOptional')"
                             >
-                                <optgroup v-if="builtInTones.length" :label="t('tones.builtIn')">
-                                    <option
-                                        v-for="tone in builtInTones"
-                                        :key="`b-${tone.id}`"
-                                        :value="toneKey('built_in', tone.id)"
-                                    >
-                                        {{ tone.name }}
-                                    </option>
-                                </optgroup>
-                                <optgroup v-if="customTones.length" :label="t('tones.custom')">
-                                    <option
-                                        v-for="tone in customTones"
-                                        :key="`c-${tone.id}`"
-                                        :value="toneKey('custom', tone.id)"
-                                    >
-                                        {{ tone.name }}
-                                    </option>
-                                </optgroup>
-                            </select>
-                        </div>
+                                <button
+                                    type="button"
+                                    role="radio"
+                                    class="nova-gen-tone-option"
+                                    :class="{ 'is-selected': selectedToneKey === 'none' }"
+                                    :aria-checked="selectedToneKey === 'none'"
+                                    :disabled="phase === 'generating'"
+                                    @click="selectedToneKey = 'none'"
+                                >
+                                    <span class="nova-gen-type-radio" aria-hidden="true" />
+                                    <span class="nova-gen-type-copy">
+                                        <span class="nova-gen-type-name">{{ t('generator.noTone') }}</span>
+                                        <span class="nova-gen-type-desc">{{ t('generator.noToneDesc') }}</span>
+                                    </span>
+                                </button>
 
+                                <button
+                                    v-for="tone in builtInTones"
+                                    :key="`b-${tone.id}`"
+                                    type="button"
+                                    role="radio"
+                                    class="nova-gen-tone-option"
+                                    :class="{
+                                        'is-selected': selectedToneKey === toneKey('built_in', tone.id),
+                                    }"
+                                    :aria-checked="selectedToneKey === toneKey('built_in', tone.id)"
+                                    :disabled="phase === 'generating'"
+                                    @click="selectedToneKey = toneKey('built_in', tone.id)"
+                                >
+                                    <span class="nova-gen-type-radio" aria-hidden="true" />
+                                    <span class="nova-gen-type-copy">
+                                        <span class="nova-gen-type-name">{{ tone.name }}</span>
+                                        <span v-if="tone.description" class="nova-gen-type-desc">
+                                            {{ tone.description }}
+                                        </span>
+                                    </span>
+                                </button>
+
+                                <p class="nova-gen-tone-section-label">
+                                    {{ t('generator.myTonesSection') }}
+                                </p>
+
+                                <button
+                                    v-for="tone in customTones"
+                                    :key="`c-${tone.id}`"
+                                    type="button"
+                                    role="radio"
+                                    class="nova-gen-tone-option"
+                                    :class="{
+                                        'is-selected': selectedToneKey === toneKey('custom', tone.id),
+                                    }"
+                                    :aria-checked="selectedToneKey === toneKey('custom', tone.id)"
+                                    :disabled="phase === 'generating'"
+                                    @click="selectedToneKey = toneKey('custom', tone.id)"
+                                >
+                                    <span class="nova-gen-type-radio" aria-hidden="true" />
+                                    <span class="nova-gen-type-copy">
+                                        <span class="nova-gen-type-name">{{ tone.name }}</span>
+                                        <span class="nova-gen-type-desc">
+                                            {{ customToneDescription(tone) }}
+                                        </span>
+                                    </span>
+                                </button>
+
+                                <Link
+                                    class="nova-gen-tone-new"
+                                    href="/tones?new=1"
+                                >
+                                    {{ t('generator.newToneCard') }}
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else class="nova-gen-step-body">
                         <div class="nova-gen-field nova-gen-field-brief">
                             <div class="nova-gen-label-row">
-                                <label class="nova-gen-label" for="brief">{{ t('generator.brief') }}</label>
+                                <label class="nova-gen-label" for="brief">
+                                    {{ t('generator.yourBrief') }}
+                                </label>
                                 <span class="nova-gen-counter">
                                     {{ brief.length }} / {{ briefMaxLength }}
                                 </span>
@@ -418,59 +783,115 @@ onUnmounted(() => {
                                 id="brief"
                                 v-model="brief"
                                 class="form-control nova-gen-brief"
-                                rows="5"
+                                rows="8"
                                 :maxlength="briefMaxLength"
                                 :placeholder="t('generator.briefPlaceholder')"
                                 :disabled="phase === 'generating'"
                             />
+                            <p class="nova-gen-brief-tip">{{ t('generator.briefTip') }}</p>
                         </div>
                     </div>
 
-                    <div class="nova-gen-actions">
-                        <button
-                            type="submit"
-                            class="nova-btn nova-btn-primary nova-gen-generate"
-                            :disabled="!canGenerate"
+                    <footer class="nova-gen-wizard-footer">
+                        <div
+                            class="nova-gen-wizard-footer-actions"
+                            :class="{ 'is-brief-step': wizardStep === 3 }"
                         >
-                            <span class="nova-gen-generate-main">
-                                <span class="nova-gen-wand" aria-hidden="true">✨</span>
-                                <span>{{
-                                    phase === 'generating'
-                                        ? t('generator.generating')
-                                        : t('generator.generate')
-                                }}</span>
-                            </span>
-                            <span
-                                v-if="phase !== 'generating'"
-                                class="nova-badge nova-gen-credit-badge"
+                            <button
+                                v-if="wizardStep > 1 && phase !== 'generating'"
+                                type="button"
+                                class="nova-btn nova-gen-back-btn"
+                                @click="goBack"
                             >
-                                {{ t('generator.creditBadge') }}
-                            </span>
-                        </button>
+                                {{ t('generator.back') }}
+                            </button>
+                            <button
+                                v-if="wizardStep < 3"
+                                type="button"
+                                class="nova-btn nova-btn-primary nova-gen-next-btn"
+                                :disabled="phase === 'generating'"
+                                @click="goNext"
+                            >
+                                {{ t('generator.next') }}
+                            </button>
+                            <template v-else>
+                                <button
+                                    type="submit"
+                                    class="nova-btn nova-btn-primary nova-gen-generate"
+                                    :disabled="!canGenerate"
+                                >
+                                    <span class="nova-gen-generate-main">
+                                        <span class="nova-gen-wand" aria-hidden="true">✨</span>
+                                        <span>{{
+                                            phase === 'generating'
+                                                ? t('generator.generating')
+                                                : t('generator.generateWithCredit')
+                                        }}</span>
+                                    </span>
+                                </button>
+                            </template>
+                        </div>
                         <button
-                            v-if="phase === 'generating'"
+                            v-if="wizardStep === 3 && phase === 'generating'"
                             type="button"
                             class="nova-btn-link nova-gen-stop-link"
                             @click="onStop"
                         >
                             {{ t('generator.stop') }}
                         </button>
-                    </div>
+                        <p
+                            v-if="wizardStep === 3 && wallet"
+                            class="nova-gen-credits-foot"
+                        >
+                            {{ creditsLeftLine }}
+                        </p>
+                    </footer>
                 </form>
             </div>
 
             <div class="nova-card nova-gen-panel nova-gen-result">
-                <div class="nova-gen-result-head nova-row">
-                    <h3>{{ t('generator.outputTitle') }}</h3>
-                    <span v-if="phase === 'generating'" class="nova-badge">
-                        {{ t('generator.streaming') }}
-                    </span>
+                <div class="nova-gen-result-head">
+                    <h3 class="nova-gen-result-title">{{ t('generator.outputTitle') }}</h3>
+                    <div class="nova-gen-result-actions">
+                        <span v-if="phase === 'generating'" class="nova-badge nova-gen-stream-badge">
+                            {{ t('generator.streaming') }}
+                        </span>
+                        <button
+                            type="button"
+                            class="nova-btn nova-btn-primary nova-gen-action-copy"
+                            :disabled="!outputText"
+                            @click="copyOutput"
+                        >
+                            {{ t('generator.copy') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="nova-btn nova-gen-action-regen"
+                            :disabled="!outputText || !hasCredits || phase === 'generating'"
+                            @click="onRegenerate"
+                        >
+                            {{ t('generator.regenerate') }}
+                        </button>
+                    </div>
                 </div>
 
-                <p v-if="phase === 'failed'" class="nova-alert" style="margin-bottom: 10px">
-                    {{ errorMessage || t('generator.failedDefault') }}
-                    <span class="nova-muted"> {{ t('generator.noCharge') }}</span>
-                </p>
+                <div v-if="phase === 'failed'" class="nova-alert nova-gen-result-alert">
+                    <p style="margin: 0">
+                        {{ errorMessage || t('generator.failedDefault') }}
+                        <span v-if="!concurrencyBlocked" class="nova-muted">
+                            {{ t('generator.noCharge') }}
+                        </span>
+                    </p>
+                    <button
+                        v-if="concurrencyBlocked && cancelTargetId"
+                        type="button"
+                        class="nova-btn nova-gen-cancel-active-btn nova-gen-result-cancel"
+                        :disabled="cancellingActive"
+                        @click="onCancelActiveGeneration"
+                    >
+                        {{ t('generator.cancelActive') }}
+                    </button>
+                </div>
 
                 <div class="nova-gen-output-wrap">
                     <div
@@ -481,47 +902,22 @@ onUnmounted(() => {
                         <template v-else-if="phase === 'generating'">
                             {{ t('generator.streaming') }}
                         </template>
+                        <template v-else>
+                            {{ t('generator.resultPlaceholderSub') }}
+                        </template>
                     </div>
                 </div>
 
-                <div class="nova-gen-icon-bar">
-                    <button
-                        type="button"
-                        class="nova-gen-icon-btn"
-                        :title="t('generator.copy')"
-                        :disabled="!outputText"
-                        @click="copyOutput"
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <rect x="9" y="9" width="13" height="13" rx="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                        </svg>
-                    </button>
-                    <button
-                        type="button"
-                        class="nova-gen-icon-btn"
-                        :title="t('generator.regenerate')"
-                        :disabled="!outputText || !hasCredits || phase === 'generating'"
-                        @click="onRegenerate"
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M3 12a9 9 0 0 1 15-6.7L21 3v6h-6" />
-                            <path d="M21 12a9 9 0 0 1-15 6.7L3 21v-6h6" />
-                        </svg>
-                    </button>
-                    <Link
-                        v-if="activeGenerationId && phase !== 'generating'"
-                        class="nova-gen-icon-btn"
-                        :href="`/history/${activeGenerationId}`"
-                        :title="t('generator.viewInHistory')"
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                            <path d="M15 3h6v6" />
-                            <path d="M10 14 21 3" />
-                        </svg>
-                    </Link>
-                </div>
+                <p v-if="phase === 'done'" class="nova-gen-result-meta">
+                    {{ resultMetaLine }}
+                </p>
+                <Link
+                    v-else-if="activeGenerationId && outputText"
+                    class="nova-gen-history-link"
+                    :href="`/history/${activeGenerationId}`"
+                >
+                    {{ t('generator.viewInHistory') }}
+                </Link>
             </div>
         </div>
     </div>

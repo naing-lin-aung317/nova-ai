@@ -2,15 +2,20 @@
 
 namespace App\Services;
 
-use App\Contracts\GeminiClient;
+use App\Contracts\AiProvider;
 use App\Enums\GenerationStatus;
-use App\Exceptions\GeminiStreamException;
+use App\Exceptions\AiProviderException;
 use App\Exceptions\GenerationConcurrencyException;
 use App\Exceptions\InsufficientCreditsException;
 use App\Models\ApiUsageLog;
 use App\Models\GenerationRequest;
 use App\Models\User;
+use App\Support\ActiveAiConfig;
+use App\Support\AiHttpErrors;
+use App\Support\AiOutputChunker;
+use App\Support\AiPrompt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class GenerationService
@@ -18,7 +23,7 @@ class GenerationService
     public function __construct(
         public WalletService $wallets,
         public GenerationPromptBuilder $prompts,
-        public GeminiClient $gemini,
+        public AiProvider $ai,
     ) {}
 
     /**
@@ -45,7 +50,7 @@ class GenerationService
                 'user_id' => $user->id,
                 'idempotency_key' => $idempotencyKey,
                 'status' => GenerationStatus::Pending,
-                'model' => config('nova.gemini.model'),
+                'model' => ActiveAiConfig::model(),
             ]);
 
             $reservationKey = $idempotencyKey ?? ('generation:'.$generation->id);
@@ -102,7 +107,10 @@ class GenerationService
             $userPrompt = $this->prompts->userPrompt($generation);
             $buffer = '';
 
-            foreach ($this->gemini->streamOrFail($system, $userPrompt) as $chunk) {
+            $encodedPrompt = AiPrompt::encode($system, $userPrompt);
+            $fullText = $this->ai->generate($encodedPrompt);
+
+            foreach (AiOutputChunker::stream($fullText) as $chunk) {
                 if ($this->shouldStop($generation)) {
                     $this->stop($generation);
 
@@ -136,12 +144,12 @@ class GenerationService
             }
 
             $success = true;
-        } catch (GeminiStreamException $exception) {
+        } catch (AiProviderException $exception) {
             $errorCode = $exception->errorCode;
-            $this->fail($generation, $exception->getMessage(), $errorCode);
+            $this->fail($generation, AiHttpErrors::userFailureReason($exception), $errorCode);
         } catch (\Throwable $exception) {
             $errorCode = 'server_error';
-            $this->fail($generation, 'Generation failed. No credit was charged.', $errorCode);
+            $this->fail($generation, 'generation_failed', $errorCode);
         } finally {
             ApiUsageLog::query()->create([
                 'generation_request_id' => $generation->id,
@@ -171,15 +179,58 @@ class GenerationService
                 ->where('expires_at', '<', now()))
             ->with('reservation')
             ->each(function (GenerationRequest $generation) use (&$released): void {
-                $this->fail($generation, 'Generation timed out. No credit was charged.', 'timeout');
+                $this->fail($generation, 'timeout', 'timeout');
                 $released++;
             });
 
         return $released;
     }
 
+    public function releaseStuckGenerations(?int $userId = null): int
+    {
+        $minutes = (int) config('nova.generation.stuck_timeout_minutes', 2);
+        $cutoff = now()->subMinutes(max(1, $minutes));
+        $released = 0;
+
+        $query = GenerationRequest::query()
+            ->whereIn('status', [GenerationStatus::Pending, GenerationStatus::Streaming])
+            ->where(function ($builder) use ($cutoff): void {
+                $builder
+                    ->where(function ($pending) use ($cutoff): void {
+                        $pending->where('status', GenerationStatus::Pending)
+                            ->where('created_at', '<', $cutoff);
+                    })
+                    ->orWhere(function ($streaming) use ($cutoff): void {
+                        $streaming->where('status', GenerationStatus::Streaming)
+                            ->whereRaw('COALESCE(stream_started_at, created_at) < ?', [$cutoff]);
+                    });
+            });
+
+        if ($userId !== null) {
+            $query->where('user_id', $userId);
+        }
+
+        $query->with('reservation')->each(function (GenerationRequest $generation) use (&$released): void {
+            $this->fail($generation, 'timeout', 'stuck_timeout');
+            $released++;
+        });
+
+        return $released;
+    }
+
+    public function activeGenerationForUser(User $user): ?GenerationRequest
+    {
+        return GenerationRequest::query()
+            ->where('user_id', $user->id)
+            ->whereIn('status', [GenerationStatus::Pending, GenerationStatus::Streaming])
+            ->orderByDesc('id')
+            ->first();
+    }
+
     protected function assertCanStart(User $user): void
     {
+        $this->releaseStuckGenerations($user->id);
+
         $max = (int) config('nova.generation.max_concurrent_per_user', 1);
 
         $active = GenerationRequest::query()
@@ -212,7 +263,7 @@ class GenerationService
         $generation->forceFill([
             'status' => GenerationStatus::Stopped,
             'completed_at' => now(),
-            'failure_reason' => 'Stopped by user. No credit was charged.',
+            'failure_reason' => 'stopped',
         ])->save();
 
         if ($generation->reservation !== null) {
@@ -222,6 +273,13 @@ class GenerationService
 
     protected function fail(GenerationRequest $generation, string $reason, ?string $code = null): void
     {
+
+        Log::warning('Generation failed', [
+            'generation_id' => $generation->id,
+            'failure_reason' => $reason,
+            'error_code' => $code,
+        ]);
+
         $generation->load('reservation');
 
         $generation->forceFill([

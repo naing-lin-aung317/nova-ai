@@ -21,7 +21,7 @@ const { t } = useI18n();
             <Link class="nova-logo" href="/" style="color: var(--nova-tx)">
                 <i>N</i>{{ t('appName') }}
             </Link>
-            <span class="nova-row">
+            <span class="nova-pref-toggles-row nova-pref-toggles-row--inline">
                 <LanguageSwitcher />
                 <ThemeSwitcher />
             </span>

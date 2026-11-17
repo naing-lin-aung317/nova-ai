@@ -19,7 +19,7 @@ function label(option: ThemePreference): string {
 </script>
 
 <template>
-    <div>
+    <div class="nova-pref-switcher">
         <div class="nova-seg" role="group" :aria-label="t('shell.theme')">
             <button
                 v-for="option in options"

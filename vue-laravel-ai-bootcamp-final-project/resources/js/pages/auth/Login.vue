@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Form, Link } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
-import AuthCard from '@/components/shell/AuthCard.vue';
 import FormErrors from '@/components/shell/FormErrors.vue';
+import LanguageSwitcher from '@/components/shell/LanguageSwitcher.vue';
 import PasswordField from '@/components/shell/PasswordField.vue';
+import ThemeSwitcher from '@/components/shell/ThemeSwitcher.vue';
 import AuthSplitLayout from '@/layouts/AuthSplitLayout.vue';
 
 defineOptions({ layout: AuthSplitLayout });
@@ -17,50 +18,66 @@ const { t } = useI18n();
 </script>
 
 <template>
-    <AuthCard title-key="pages.login">
-        <p v-if="status" class="nova-muted">{{ status }}</p>
-        <Form action="/login" method="post" #default="{ errors, processing }">
-            <label class="form-label" for="email">{{ t('auth.email') }}</label>
-            <input
-                id="email"
-                autocomplete="username"
-                class="form-control"
-                name="email"
-                placeholder="you@example.com"
-                required
-                type="email"
-            />
-            <FormErrors :errors="errors.email" />
+    <div class="nova-auth-login">
+        <div class="nova-auth-login-top">
+            <Link class="nova-auth-back" href="/">← {{ t('shell.backHome') }}</Link>
+            <div class="nova-pref-toggles-row nova-pref-toggles-row--inline">
+                <LanguageSwitcher />
+                <ThemeSwitcher />
+            </div>
+        </div>
 
-            <label class="form-label" for="password" style="margin-top: 12px">{{
-                t('auth.password')
-            }}</label>
-            <PasswordField
-                autocomplete="current-password"
-                name="password"
-                :placeholder="t('auth.passwordHint')"
-            />
-            <FormErrors :errors="errors.password" />
+        <header class="nova-auth-login-head">
+            <h1 class="nova-auth-login-title">{{ t('auth.welcomeBack') }}</h1>
+            <p class="nova-auth-login-sub">{{ t('auth.loginSubtitle') }}</p>
+        </header>
 
-            <p class="nova-row" style="margin-top: 8px; justify-content: space-between">
-                <Link v-if="canResetPassword" href="/forgot-password">{{
-                    t('pages.forgot')
-                }}</Link>
-            </p>
+        <p v-if="status" class="nova-muted nova-auth-login-status">{{ status }}</p>
+
+        <Form action="/login" method="post" class="nova-auth-login-form" #default="{ errors, processing }">
+            <div class="nova-auth-field">
+                <label class="nova-auth-label" for="email">{{ t('auth.email') }}</label>
+                <input
+                    id="email"
+                    autocomplete="username"
+                    class="form-control nova-auth-input"
+                    name="email"
+                    placeholder="you@example.com"
+                    required
+                    type="email"
+                />
+                <FormErrors :errors="errors.email" />
+            </div>
+
+            <div class="nova-auth-field">
+                <div class="nova-auth-label-row">
+                    <label class="nova-auth-label" for="login-password">{{ t('auth.password') }}</label>
+                    <Link v-if="canResetPassword" class="nova-auth-forgot" href="/forgot-password">
+                        {{ t('pages.forgot') }}
+                    </Link>
+                </div>
+                <PasswordField
+                    autocomplete="current-password"
+                    id="login-password"
+                    inline-toggle
+                    name="password"
+                    :placeholder="t('auth.passwordHint')"
+                />
+                <FormErrors :errors="errors.password" />
+            </div>
 
             <button
-                class="nova-btn nova-btn-primary w-100"
+                class="nova-btn nova-btn-primary nova-auth-submit"
                 :disabled="processing"
-                style="margin-top: 14px"
                 type="submit"
             >
                 {{ t('pages.login') }}
             </button>
         </Form>
 
-        <p class="nova-muted" style="margin-top: 12px">
+        <p class="nova-auth-login-footer">
             {{ t('auth.newHere') }}
             <Link href="/register">{{ t('auth.createAccount') }}</Link>
         </p>
-    </AuthCard>
+    </div>
 </template>

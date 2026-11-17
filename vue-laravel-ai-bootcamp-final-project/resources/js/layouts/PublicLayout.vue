@@ -21,8 +21,10 @@ const user = computed(
                 <i>N</i>{{ t('appName') }}
             </Link>
             <span class="nova-row">
-                <LanguageSwitcher />
-                <ThemeSwitcher />
+                <span class="nova-pref-toggles-row nova-pref-toggles-row--inline">
+                    <LanguageSwitcher />
+                    <ThemeSwitcher />
+                </span>
                 <template v-if="user">
                     <Link class="nova-btn nova-btn-primary" href="/dashboard">
                         {{ t('shell.goToDashboard') }}

@@ -1,30 +1,16 @@
 <?php
 
 use App\Enums\GenerationStatus;
-use App\Gemini\FakeGeminiClient;
-use App\Models\BuiltInTone;
 use App\Models\GenerationRequest;
 use App\Models\User;
 use App\Services\GenerationService;
 use App\Services\WalletService;
 use Illuminate\Support\Facades\Artisan;
-
-/**
- * @return array<string, mixed>
- */
-function validGenerationPayload(): array
-{
-    return [
-        'content_type' => 'facebook_post',
-        'language' => 'en',
-        'length' => 'medium',
-        'built_in_tone_id' => BuiltInTone::query()->value('id'),
-        'topic' => 'Handmade candles for autumn evenings',
-    ];
-}
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
-    FakeGeminiClient::reset();
+    Http::preventStrayRequests();
+    configureGeminiForTests();
 });
 
 test('refuses generation when no credits are available', function () {
@@ -38,6 +24,8 @@ test('refuses generation when no credits are available', function () {
 });
 
 test('successful stream captures one credit', function () {
+    fakeGeminiGenerateContent();
+
     $user = User::factory()->create();
 
     $create = $this->actingAs($user)
@@ -63,7 +51,10 @@ test('successful stream captures one credit', function () {
 });
 
 test('provider failure releases the reservation without charging', function () {
-    FakeGeminiClient::$fail = true;
+    fakeGeminiGenerateContent(
+        status: 401,
+        body: ['error' => ['message' => 'API key not valid. Please pass a valid API key.']],
+    );
 
     $user = User::factory()->create();
 
@@ -78,7 +69,8 @@ test('provider failure releases the reservation without charging', function () {
     app(GenerationService::class)->stream($generation);
     $generation->refresh();
 
-    expect($generation->status)->toBe(GenerationStatus::Failed);
+    expect($generation->status)->toBe(GenerationStatus::Failed)
+        ->and($generation->failure_reason)->toBe('invalid_api_key');
 
     $user->creditWallet?->refresh();
 
@@ -162,6 +154,8 @@ test('another user cannot view a generation', function () {
 });
 
 test('stream route responds for the generation owner', function () {
+    fakeGeminiGenerateContent();
+
     $user = User::factory()->create();
 
     $generationId = $this->actingAs($user)

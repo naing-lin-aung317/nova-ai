@@ -34,9 +34,11 @@ const props = defineProps<{
 const { t } = useI18n();
 const page = usePage();
 
-const userName = computed(
-    () => (page.props.auth as { user: AuthUser }).user.name,
-);
+const authUser = computed(() => (page.props.auth as { user: AuthUser }).user);
+
+const userName = computed(() => authUser.value.name);
+
+const isSuperAdmin = computed(() => authUser.value.role === 'super_admin');
 
 const quickType = ref(props.contentTypes[0] ?? 'facebook_post');
 const quickTopic = ref('');
@@ -56,6 +58,9 @@ const generatorLink = computed(() => {
 <template>
     <div class="nova-dash">
         <section class="nova-card nova-dash-welcome">
+            <p v-if="isSuperAdmin" class="nova-dash-admin-link">
+                <Link class="nova-btn nova-btn-primary" href="/admin">{{ t('nav.adminPanel') }}</Link>
+            </p>
             <h2 class="nova-dash-welcome-title">
                 {{ t('dashboard.welcomeBanner', { name: userName, count: stats.availableCredits }) }}
             </h2>

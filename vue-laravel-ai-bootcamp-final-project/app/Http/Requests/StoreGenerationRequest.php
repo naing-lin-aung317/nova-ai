@@ -41,9 +41,6 @@ class StoreGenerationRequest extends FormRequest
                 $validator->errors()->add('tone', 'Choose either a built-in tone or a custom tone, not both.');
             }
 
-            if (! $this->filled('built_in_tone_id') && ! $this->filled('custom_tone_id')) {
-                $validator->errors()->add('tone', 'A tone is required.');
-            }
         });
     }
 
